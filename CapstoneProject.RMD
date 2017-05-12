@@ -1,0 +1,166 @@
+---
+title: "SwiftKey Capstone Project"
+author: "George Vu"
+date: "5/6/2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(LaF)
+library(ggplot2)
+library(quanteda)
+createSampleFile <- function(infile, outfile, num_samples) {
+  set.seed(num_samples)
+  lines <- sample_lines(infile, num_samples)
+  con <- file(outfile, "w") 
+  writeLines(lines, con)
+  close(con)
+  lines
+}
+readSampleFile <- function(infile) {
+  con <- file(infile, "r") 
+  lines <- readLines(con)
+  close(con)
+  lines
+}
+```
+
+## Introduction
+Around the world, people are spending an increasing amount of time on their mobile devices for email, social networking, banking and a whole range of other activities. But typing on mobile devices can be a serious pain. SwiftKey, the corporate partner in this capstone, builds a smart keyboard that makes it easier for people to type on their mobile devices. One cornerstone of their smart keyboard is predictive text models.  
+
+In this capstone project I will be investigating the concepts below:
+- Natural Language Processing (NLP)
+- Predictive Text Models
+- Text Mining
+- Copora and Corpus Investigation
+
+The Coursera Data Science Capstone project dataset is available <a href='https://d396qusza40orc.cloudfront.net/dsscapstone/dataset/Coursera-SwiftKey.zip'>here</a>.
+
+In this project I will only be dealing with English words and will not deal with any profanity or filtering of the words.  Since the data files are quite large, I will attempt to build sample files form the large data sets.  First, the data will be loaded and a sample file will be created with 3000 random lines from each data file - en_US.blog.txtm en_US.twitter.txt, and en_US.news.txt.  The sample files will be used instead of loading the whole dataset for ease of data inspection.  I can simply re-read the sample files created so I can replicate my findings and decrease the amount of time setting up the data.  I will combine all 3 files into one dataset so will have 9000 lines of text to work with.  I will divide my 9000 lines into a training set (60%), test set (30%), and a hold-out set (10%).  I will use the training set to train my model and test the model against the test set.  I can later use the hold-out set to set some other parameters.  
+```{r load, echo=FALSE}
+datasetURL <- 'https://d396qusza40orc.cloudfront.net/dsscapstone/dataset/Coursera-SwiftKey.zip'
+datasetFile <- 'Coursera-SwiftKey.zip'
+dataDir <- './data/'
+if (!file.exists("Coursera-SwiftKey.zip")) {
+    download.file(datasetURL, datasetFile)
+}
+if (!(dir.exists(dataDir))) {
+  dir.create(dataDir)
+  unzip(datasetFile, exdir=dataDir)
+}
+dataPath <- paste0(dataDir, 'final/en_US/en_US.')
+blogFile <- paste0(dataPath, 'blogs.txt')
+twitterFile <- paste0(dataPath, 'twitter.txt')
+newsFile <- paste0(dataPath, 'news.txt')
+sampleBlogFile <- paste0(dataDir, 'sample_blogs.txt')
+sampleTwitterFile <- paste0(dataDir, 'sample_twitter.txt')
+sampleNewsFile <- paste0(dataDir, 'sample_news.txt')
+trainingDataFile <- paste0(dataDir, 'training_data.txt')
+testingDataFile <- paste0(dataDir, 'testing_data.txt')
+holdoutDataFile <- paste0(dataDir, 'holdout_data.txt')
+fileSize <- c(floor(file.size(twitterFile)/(1024*1000)), floor(file.size(newsFile)/(1024*1000)), floor(file.size(blogFile)/(1024*1000)))
+fileName <- c(twitterFile, newsFile, blogFile)
+df <- data.frame(fileName, fileSize)
+names(df) <- c("file name", "file size (MB)")
+print.data.frame(df)
+#Create random samples from the dataset and save them to a file for later use
+if (file.exists(trainingDataFile)) {
+  trainingData <- readSampleFile(trainingDataFile)
+  testingData <- readSampleFile(testingDataFile)
+  holdoutData <- readSampleFile(holdoutDataFile)
+} else {
+  sampleBlogs <- createSampleFile(blogFile, sampleBlogFile, 3000)
+  sampleTwitter <- createSampleFile(twitterFile, sampleTwitterFile, 3000)
+  sampleNews <- createSampleFile(newsFile, sampleNewsFile, 3000)
+  # create the training set (60% of data), test set (30% if data), and hold-out set (10% of data)
+  set.seed(3000)
+  allText <- c(sampleBlogs[1:2700], sampleBlogs[1:2700], sampleNews[1:2700])
+  rows <- length(allText)
+  train <- sample(seq_len(rows), size = 0.6 * rows)
+  trainingData <- allText[train]
+  testingData <- allText[-train]
+  holdoutData <- allText[2701:3000]
+  con <- file(trainingDataFile, "w") 
+  writeLines(trainingData, con)
+  close(con)
+  con <- file(testingDataFile, "w") 
+  writeLines(testingData, con)
+  close(con)
+  con <- file(holdoutDataFile, "w") 
+  writeLines(holdoutData, con)
+  close(con)
+}
+```
+
+## Data Inspection
+To do some of the NLP processing on the data I wil use the 'qunateda' library to tokenize the text into single words, bigrams, trigrams, and quadgrams.  I want to remove the following features from the text because I am not concerned with sentence structure but just predicting the next text:
+- Remove all numbers (tokens function)
+- Convert to lower case (dfm function will handle this)
+- Remove punctuation (tokens function)
+```{r buildTokens, echo=FALSE}
+#keep apostrophes
+bigrams <- tokens(trainingData, what='word', remove_numbers=TRUE, remove_punct=TRUE, remove_twitter=TRUE, remove_url = TRUE, remove_symbols = TRUE, ngrams=2:3, concatenator = " ")
+trigrams <- tokens(trainingData, what='word', remove_numbers=TRUE, remove_punct=TRUE, remove_twitter=TRUE, remove_url = TRUE, remove_symbols = TRUE, ngrams=3, concatenator = " ")
+```
+Now that words have been tokenized and put into singles, bigrams, trigram, and quadgram tokens I can extract some features from the document by creating document-feature matrices for each.  I can easily start looking at features like the most frequent terms, most frequent bigrams and trigrams, and visualize these features in plots.
+```{r document features, echo=FALSE}
+dfmBigram <- dfm(bigrams)
+nfeature(dfmBigram)
+dfmBigram <- dfm_weight(dfmBigram, "frequency")
+dfmBigram <- dfm_trim(dfmBigram, min_docfreq = 2)
+dfmBigram <- dfm_sort(dfmBigram)
+nfeature(dfmBigram)
+sparsity(dfmBigram)
+featuresBigram <- sort(featnames(dfmBigram))
+barplot(topFeaturesBigram, las = 2, names.arg = names(topFeaturesBigram),
+        col ="lightblue", main ="Most frequent bigrams",
+        ylab = "Word frequencies")
+dfmTrigram <- dfm(trigrams)
+nfeature(dfmTrigram)
+dfmTrigram <- dfm_weight(dfmTrigram, "frequency")
+dfmTrigram <- dfm_trim(dfmTrigram, min_docfreq = 2) 
+dfmTrigram <- dfm_sort(dfmTrigram)
+nfeature(dfmTrigram)
+sparsity(dfmTrigram)
+topFeaturesTrigram <- topfeatures(dfmTrigram, 20)
+barplot(topFeaturesTrigram, las = 2, names.arg = names(topFeaturesTrigram),
+        col ="lightblue", main ="Most frequent bigrams",
+        ylab = "Word frequencies")
+```
+
+## Reducing the features 
+Some of the things I want to do to reduce the amount of words to parse is to reduce the number of words.  
+
+* Remove ngrams with that only occur once
+
+## Next Steps
+The next step is figure out a predictive text model using the smallest amount (in memory) of the texts.  I will need to look:
+- Storing an n-gram model - what data structure can I use?
+- Make the model as small as possible with coverage above 90%
+- For smartphone typing a quadgram model is sufficient for a predictive text model
+- Evaluate the model by randomly selecting n-grams from the sample data and test data against the predictive text model
+How do we estimate these bigram or N-gram probabilities? The simplest and
+most intuitive way to estimate probabilities is called Maximum Likelihood Estimation,
+or MLE. We get the MLE estimate for the parameters of an N-gram models by
+* Use a back-off algorithm to predict the next word starting with 4-gram down to unigram.
+* Save trigram and bigram frequency table sin separate alphabetical files and only access those needed at the time in a pool of 100 top in memory and replace in mempry as needed
+* increase the number of trigrams and bigrams to use by writing them to a file, sorting them alphebetically and by frequency then accessing them using the start word and loading only the start word bigrams and trigrams
+* need to calculate the file access, search and load times
+http://www.katrinerk.com/courses/words-in-a-haystack-an-introductory-statistics-course/schedule-words-in-a-haystack/r-code-the-text-mining-package
+
+https://github.com/kbenoit/quanteda/issues/46
+test_tokens <- selectFeatures(test_tokens, features(train_tokens))
+
+library(glmnet)  
+fit <- glmnet(train_sparse,train[,11])
+
+# use cv.glmnet to find best lambda/penalty 
+# s is the penalty parameter
+cv <- cv.glmnet(train_sparse,train[,11],nfolds=3)
+pred <- predict(fit, test_sparse,type="response", s=cv$lambda.min)
+
+Good Turing
+http://rstudio-pubs-static.s3.amazonaws.com/165358_78fd356d6e124331bd66981c51f7ad7c.html
+
+
