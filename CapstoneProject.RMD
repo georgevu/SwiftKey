@@ -7,22 +7,99 @@ output: html_document
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+library(R.utils)
 library(LaF)
 library(ggplot2)
 library(quanteda)
+library(data.table)
 createSampleFile <- function(infile, outfile, num_samples) {
-  set.seed(num_samples)
+  set.seed(seed)
   lines <- sample_lines(infile, num_samples)
   con <- file(outfile, "w") 
-  writeLines(lines, con)
+  writeLines(lines, con, encoding = "UTF-8")
   close(con)
   lines
 }
-readSampleFile <- function(infile) {
-  con <- file(infile, "r") 
-  lines <- readLines(con)
+readSampleFile <- function() {
+  con <- file(sampleFile, "r") 
+  lines <- readLines(con, encoding = "UTF-8")
+  close(con)
+  set.seed(seed)
+  idx <- sample(seq(1, 2), size = length(lines), replace = TRUE, prob = c(.7, .3))
+  trainingData <- lines[idx==1]
+  testingData <- lines[idx==2]
+  out <- file(trainingDataFile, "w") 
+  writeLines(trainingData, out, encoding = "UTF-8")
+  close(out)
+  out <- file(testingDataFile, "w") 
+  writeLines(testingData, out, encoding = "UTF-8")
+  close(out)
+  return(trainingData)
+}
+readTrainingData <- function() {
+  con <- file(trainingDataFile, "r") 
+  lines <- readLines(con, encoding = "UTF-8")
   close(con)
   lines
+}
+readTestingData <- function() {
+  con <- file(testingDataFile, "r") 
+  lines <- readLines(con, encoding = "UTF-8")
+  close(con)
+  lines
+}
+createDataFiles <- function() {
+  set.seed(seed)
+  outSample <- file(sampleFile, "w") 
+  filePath <- paste0(dataPath, blogFile)
+  numLines <- countLines(filePath)
+  lines <- createSampleFile(filePath, paste0(dataDir, "sample_", blogFile), floor(0.25*numLines))
+  writeLines(lines, outSample, encoding = "UTF-8") 
+  filePath <- paste0(dataPath, twitterFile)
+  numLines <- countLines(filePath)
+  lines <- createSampleFile(filePath, paste0(dataDir, "sample_", twitterFile), floor(0.25*numLines))
+  writeLines(lines, outSample, encoding = "UTF-8") 
+  filePath <- paste0(dataPath, newsFile)
+  numLines <- countLines(filePath)
+  lines <- createSampleFile(filePath, paste0(dataDir, "sample_", newsFile), floor(0.25*numLines))
+  writeLines(lines, outSample, encoding = "UTF-8") 
+  close(outSample)
+}
+
+createLookupFile <- function(num, df) {
+  
+}
+
+predict <- function(text, numSelections) {
+  textTokens <- tokens(text, what='word', remove_numbers=TRUE, remove_punct=TRUE, remove_twitter=TRUE, remove_url = TRUE, remove_symbols = TRUE, n=1, concatenator = " ")
+  #textTokens <- tokens_remove(textTokens, stopwords("english"))
+  textTokens <- tokens_tolower(textTokens)[[1]]
+  predictedText <- ""
+  n <- length(textTokens)
+  for (i in min(n-1, 4):1) {
+    if (i == 4) {
+      searchText <- trimws(paste(textTokens[n-i+1], textTokens[n-i+2], textTokens[n-i+3], textTokens[n-i+4], collpase = ""))
+      searchText <- paste0("^", searchText, " ", collapse="")
+      selected <- gramTable5[text %like% searchText]
+    } else if (i == 3) {
+      searchText <- trimws(paste(textTokens[n-i+1], textTokens[n-i+2], textTokens[n-i+3], collpase = ""))
+      searchText <- paste0("^", searchText, " ", collapse="")
+      selected <- gramTable4[text %like% searchText]
+    } else if (i == 2) {
+      searchText <- trimws(paste(textTokens[n-i+1], textTokens[n-i+2], collapse = ""))
+      searchText <- paste0("^", searchText, " ", collapse="")
+      selected <- gramTable3[text %like% searchText]
+    } else {
+      searchText <- paste0("^", trimws(textTokens[n-i+1]), " ", collapse="")
+      selected <- gramTable2[text %like% searchText ]
+    } 
+    if (nrow(selected) > 0) {
+      #selected.max <- selected[which.max(selected$frequency), 1]
+      #predictedText <- unlist(strsplit(selected.max, " "))[i+1]
+      break
+    }
+  }
+  return(selected) 
 }
 ```
 
@@ -37,11 +114,19 @@ In this capstone project I will be investigating the concepts below:
 
 The Coursera Data Science Capstone project dataset is available <a href='https://d396qusza40orc.cloudfront.net/dsscapstone/dataset/Coursera-SwiftKey.zip'>here</a>.
 
-In this project I will only be dealing with English words and will not deal with any profanity or filtering of the words.  Since the data files are quite large, I will attempt to build sample files form the large data sets.  First, the data will be loaded and a sample file will be created with 3000 random lines from each data file - en_US.blog.txtm en_US.twitter.txt, and en_US.news.txt.  The sample files will be used instead of loading the whole dataset for ease of data inspection.  I can simply re-read the sample files created so I can replicate my findings and decrease the amount of time setting up the data.  I will combine all 3 files into one dataset so will have 9000 lines of text to work with.  I will divide my 9000 lines into a training set (60%), test set (30%), and a hold-out set (10%).  I will use the training set to train my model and test the model against the test set.  I can later use the hold-out set to set some other parameters.  
-```{r load, echo=FALSE}
+## Creating the dataset
+In this project I will only be dealing with English words and will not deal with any profanity or filtering of the words.  Since the data files are quite large, I will attempt to build sample files form the large data sets.  First, the data will be loaded and a sample file will be created with 3000 random lines from each data file - en_US.blog.txt, en_US.twitter.txt, and en_US.news.txt.  The sample files will be used instead of loading the whole dataset for ease of data inspection.  I can simply re-read the sample files created so I can replicate my findings and decrease the amount of time setting up the data.  I will combine all 3 files into one dataset so will have 9000 lines of text to work with.  I will divide my 9000 lines into a training set (60%), test set (30%), and a hold-out set (10%).  I will use the training set to train my model and test the model against the test set.  I can later use the hold-out set to set some other parameters if needed or as an extra test set.
+```{r loadData, echo=FALSE}
+seed <- 88
+dataDir <- './data/'
+dataPath <- paste0(dataDir, 'final/en_US/')
+sampleFile <- paste0(dataDir, "sample_data.txt")
+trainingDataFile <- paste0(dataDir, 'training_data.txt')
+testingDataFile <- paste0(dataDir, 'testing_data.txt')
+trainingData <- c("")
+testingData <- c("")
 datasetURL <- 'https://d396qusza40orc.cloudfront.net/dsscapstone/dataset/Coursera-SwiftKey.zip'
 datasetFile <- 'Coursera-SwiftKey.zip'
-dataDir <- './data/'
 if (!file.exists("Coursera-SwiftKey.zip")) {
     download.file(datasetURL, datasetFile)
 }
@@ -49,92 +134,99 @@ if (!(dir.exists(dataDir))) {
   dir.create(dataDir)
   unzip(datasetFile, exdir=dataDir)
 }
-dataPath <- paste0(dataDir, 'final/en_US/en_US.')
-blogFile <- paste0(dataPath, 'blogs.txt')
-twitterFile <- paste0(dataPath, 'twitter.txt')
-newsFile <- paste0(dataPath, 'news.txt')
-sampleBlogFile <- paste0(dataDir, 'sample_blogs.txt')
-sampleTwitterFile <- paste0(dataDir, 'sample_twitter.txt')
-sampleNewsFile <- paste0(dataDir, 'sample_news.txt')
-trainingDataFile <- paste0(dataDir, 'training_data.txt')
-testingDataFile <- paste0(dataDir, 'testing_data.txt')
-holdoutDataFile <- paste0(dataDir, 'holdout_data.txt')
-fileSize <- c(floor(file.size(twitterFile)/(1024*1000)), floor(file.size(newsFile)/(1024*1000)), floor(file.size(blogFile)/(1024*1000)))
+blogFile <- 'en_US.blogs.txt'
+twitterFile <- 'en_US.twitter.txt'
+newsFile <- 'en_US.news.txt'
+blogPath <- paste0(dataPath, blogFile)
+twitterPath <- paste0(dataPath, twitterFile)
+newsPath <- paste0(dataPath, newsFile)
 fileName <- c(twitterFile, newsFile, blogFile)
-df <- data.frame(fileName, fileSize)
-names(df) <- c("file name", "file size (MB)")
-print.data.frame(df)
-#Create random samples from the dataset and save them to a file for later use
+#fileSize <- c(floor(file.size(twitterPath)/(1024*1000)),
+#              floor(file.size(newsPath)/(1024*1000)),
+#              floor(file.size(blogPath)/(1024*1000)))
+#numLines <- c(countLines(twitterPath),countLines(newsPath),countLines(blogPath))
+#df <- data.frame(fileName, fileSize, numLines)
+#names(df) <- c("File Name", "File Size (MB)", "Line Count")
+#print.data.frame(df)
 if (file.exists(trainingDataFile)) {
-  trainingData <- readSampleFile(trainingDataFile)
-  testingData <- readSampleFile(testingDataFile)
-  holdoutData <- readSampleFile(holdoutDataFile)
+  trainingData <- readTrainingData()
+} else if (file.exists(sampleFile)) {
+  trainingData <- readSampleFile()
 } else {
-  sampleBlogs <- createSampleFile(blogFile, sampleBlogFile, 3000)
-  sampleTwitter <- createSampleFile(twitterFile, sampleTwitterFile, 3000)
-  sampleNews <- createSampleFile(newsFile, sampleNewsFile, 3000)
-  # create the training set (60% of data), test set (30% if data), and hold-out set (10% of data)
-  set.seed(3000)
-  allText <- c(sampleBlogs[1:2700], sampleBlogs[1:2700], sampleNews[1:2700])
-  rows <- length(allText)
-  train <- sample(seq_len(rows), size = 0.6 * rows)
-  trainingData <- allText[train]
-  testingData <- allText[-train]
-  holdoutData <- allText[2701:3000]
-  con <- file(trainingDataFile, "w") 
-  writeLines(trainingData, con)
-  close(con)
-  con <- file(testingDataFile, "w") 
-  writeLines(testingData, con)
-  close(con)
-  con <- file(holdoutDataFile, "w") 
-  writeLines(holdoutData, con)
-  close(con)
+  createDataFiles()
+  trainingData <- readSampleFile()
 }
 ```
 
-## Data Inspection
-To do some of the NLP processing on the data I wil use the 'qunateda' library to tokenize the text into single words, bigrams, trigrams, and quadgrams.  I want to remove the following features from the text because I am not concerned with sentence structure but just predicting the next text:
-- Remove all numbers (tokens function)
-- Convert to lower case (dfm function will handle this)
-- Remove punctuation (tokens function)
+## Data Processing
+To do some of the NLP processing on the data I wil use the 'quanteda' library to tokenize the text bigrams and trigrams.  I want to remove the following features from the text because I am not concerned with sentence structure but just predicting the next text:
+
+* Remove all numbers (tokens function)
+* Convert to lower case (dfm function will handle this)
+* Remove punctuation (tokens function)
+* Remove any urls and twitter (tokens function)
+* Remove symbols (tokens function)
+* Remove ngrams with that only occur once (dfm function)
+
 ```{r buildTokens, echo=FALSE}
-#keep apostrophes
-bigrams <- tokens(trainingData, what='word', remove_numbers=TRUE, remove_punct=TRUE, remove_twitter=TRUE, remove_url = TRUE, remove_symbols = TRUE, ngrams=2:3, concatenator = " ")
-trigrams <- tokens(trainingData, what='word', remove_numbers=TRUE, remove_punct=TRUE, remove_twitter=TRUE, remove_url = TRUE, remove_symbols = TRUE, ngrams=3, concatenator = " ")
+createNGrams <- function(ngram) {
+  grams <- tokens(trainingData, what='fasterword', remove_numbers=TRUE, remove_punct=TRUE, remove_twitter=TRUE, remove_url = TRUE, remove_symbols = TRUE, ngrams=ngram, concatenator = " ")
+  grams <- tokens_tolower(grams)
+  dfm <- dfm(grams)
+  freq <- docfreq(dfm)
+  df <- as.data.frame(freq)
+  dt <- data.table(text=row.names(df), frequency=freq)
+  setkey(dt, "text")
+  dt <- dt[order(text)]
+  return (dt)
+}
 ```
-Now that words have been tokenized and put into singles, bigrams, trigram, and quadgram tokens I can extract some features from the document by creating document-feature matrices for each.  I can easily start looking at features like the most frequent terms, most frequent bigrams and trigrams, and visualize these features in plots.
+## Data Inspection
+Now that words have been tokenized and put into ngrams with a maximum of 5-grams I can extract some features from the ngrams by creating document-feature matrices for each ngram.  I can easily start looking at features like the most frequent ngrams, and visualize these features in plots.
 ```{r document features, echo=FALSE}
-dfmBigram <- dfm(bigrams)
-nfeature(dfmBigram)
-dfmBigram <- dfm_weight(dfmBigram, "frequency")
-dfmBigram <- dfm_trim(dfmBigram, min_docfreq = 2)
-dfmBigram <- dfm_sort(dfmBigram)
-nfeature(dfmBigram)
-sparsity(dfmBigram)
-featuresBigram <- sort(featnames(dfmBigram))
-barplot(topFeaturesBigram, las = 2, names.arg = names(topFeaturesBigram),
-        col ="lightblue", main ="Most frequent bigrams",
-        ylab = "Word frequencies")
-dfmTrigram <- dfm(trigrams)
-nfeature(dfmTrigram)
-dfmTrigram <- dfm_weight(dfmTrigram, "frequency")
-dfmTrigram <- dfm_trim(dfmTrigram, min_docfreq = 2) 
-dfmTrigram <- dfm_sort(dfmTrigram)
-nfeature(dfmTrigram)
-sparsity(dfmTrigram)
-topFeaturesTrigram <- topfeatures(dfmTrigram, 20)
-barplot(topFeaturesTrigram, las = 2, names.arg = names(topFeaturesTrigram),
-        col ="lightblue", main ="Most frequent bigrams",
-        ylab = "Word frequencies")
+
+#topFeatures2 <- topfeatures(dfm2, 20)
+#barplot(topFeatures2, las = 2, names.arg = names(topFeatures2),
+#        col ="lightblue", main ="Most frequent 2-grams",
+#        ylab = "Word frequencies")
+#topFeatures3 <- topfeatures(dfm3, 20)
+#barplot(topFeatures3, las = 2, names.arg = names(topFeatures3),
+#        col ="lightblue", main ="Most frequent 3-grams",
+#        ylab = "Word frequencies")
+#topFeatures4 <- topfeatures(dfm4, 20)
+#barplot(topFeatures4, las = 2, names.arg = names(topFeatures4),
+#        col ="lightblue", main ="Most frequent 4-grams",
+#        ylab = "Word frequencies")
+#topFeatures5 <- topfeatures(dfm5, 20)
+#barplot(topFeatures5, las = 2, names.arg = names(topFeatures5),
+#        col ="lightblue", main ="Most frequent 5-grams",
+#        ylab = "Word frequencies")
 ```
+## Creating Token Files
+With the document feature matrices for each ngram I can extract the tokens with the frequency that token appears in the document.  I can use the frequency data and add a "rank" column and create a sorted data frame (sorted by the token, alphabetically).  The sorted data frame can be saved as a set of files, for example A2.txt would contain all the bigrams starting with a, and use the files for fast lookups. 
+```{r createLookupFile, echo=FALSE}
+gramTable2 <- createNGrams(2)
+gramTable3 <- createNGrams(3)
+gramTable4 <- createNGrams(4)
+gramTable5 <- createNGrams(5)
+p = c("The guy in front of me just bought a pound of bacon, a bouquet, and a case of", 
+      "You're the reason why I smile everyday. Can you follow me please? It would mean the", 
+      "Hey sunshine, can you follow me and make me the",
+      "Very early observations on the Bills game: Offense still struggling but the",
+      "Go on a romantic date at the",
+      "Well I'm pretty sure my granny has some old bagpipes in her garage I'll dust them off and be on my",
+      "Ohhhhh #PointBreak is on tomorrow. Love that film and haven't seen it in quite some",
+      "After the ice bucket challenge Louis will push his long wet hair out of his eyes with his little",
+      "Be grateful for the good times and keep the faith during the",
+      "If this isn't the cutest thing you've ever seen, then you must be")
+a = c("beer", "world", "happiest", "defense", "beach", "way", "time", "fingers", "bad", "insane")
+#createLookupFile(df2)
+```
+## Ranking the ngrams
+The tokens will be given ranks according to their frequency and the tokens and ranks of the ngrams will be saved to a file with a title consisting of a letter and number.  The letter will denote the first letter of the token and the number will be the ngram length.  The file will be useful for tracking the tokens as well as updating the rank.  I would like to devise a ranking system for the tokens by adding a column to the token file called 'pick' that increments the value whenever the token is picked for use.  Thus, the total rank of the token can be calculated by totalRank = (frequency + rank) / frequency.  This way the total rank of the selected tokens will be updated and have a higher rank then those that are not selected.  Depending on the application, I can use the total rank to give the user a selection of inputs to select for the next word or set of words.
 
-## Reducing the features 
-Some of the things I want to do to reduce the amount of words to parse is to reduce the number of words.  
-
-* Remove ngrams with that only occur once
-
-## Next Steps
+## Prediction Model
+I will use "Stupid backoff" method 
 The next step is figure out a predictive text model using the smallest amount (in memory) of the texts.  I will need to look:
 - Storing an n-gram model - what data structure can I use?
 - Make the model as small as possible with coverage above 90%
@@ -162,5 +254,15 @@ pred <- predict(fit, test_sparse,type="response", s=cv$lambda.min)
 
 Good Turing
 http://rstudio-pubs-static.s3.amazonaws.com/165358_78fd356d6e124331bd66981c51f7ad7c.html
+
+* Save the ngram tokens into a file with the ranking and add a column called 'pick' used to increment the value when the token is selected.  Calculate the total rank by the token (rank + pick) / rank.  Ranks will increse in value when the token is used.
+
+* To increase speed divide the tokens into alpha files A2, A3, A4... with the letter denoting the first letter of the ngram token and the number denoting the number of tokens.  Files will be sorted alphabetically so search in file will be log(n).
+
+* In memory tokens will not be feasible once token length is large so file tokens is a good alternative.  
+
+* For in memory token searches the token pool will have to be reduced by picking the top n% of tokens by rank with a reduction in accuracy
+
+
 
 
