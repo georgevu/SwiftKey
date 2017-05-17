@@ -12,11 +12,12 @@ library(LaF)
 library(ggplot2)
 library(quanteda)
 library(data.table)
+library(stringr)
 createSampleFile <- function(infile, outfile, num_samples) {
   set.seed(seed)
   lines <- sample_lines(infile, num_samples)
   con <- file(outfile, "w") 
-  writeLines(lines, con, encoding = "UTF-8")
+  writeLines(lines, con)
   close(con)
   lines
 }
@@ -29,10 +30,10 @@ readSampleFile <- function() {
   trainingData <- lines[idx==1]
   testingData <- lines[idx==2]
   out <- file(trainingDataFile, "w") 
-  writeLines(trainingData, out, encoding = "UTF-8")
+  writeLines(trainingData, out)
   close(out)
   out <- file(testingDataFile, "w") 
-  writeLines(testingData, out, encoding = "UTF-8")
+  writeLines(testingData, out)
   close(out)
   return(trainingData)
 }
@@ -54,15 +55,15 @@ createDataFiles <- function() {
   filePath <- paste0(dataPath, blogFile)
   numLines <- countLines(filePath)
   lines <- createSampleFile(filePath, paste0(dataDir, "sample_", blogFile), floor(0.25*numLines))
-  writeLines(lines, outSample, encoding = "UTF-8") 
+  writeLines(lines, outSample) 
   filePath <- paste0(dataPath, twitterFile)
   numLines <- countLines(filePath)
   lines <- createSampleFile(filePath, paste0(dataDir, "sample_", twitterFile), floor(0.25*numLines))
-  writeLines(lines, outSample, encoding = "UTF-8") 
+  writeLines(lines, outSample) 
   filePath <- paste0(dataPath, newsFile)
   numLines <- countLines(filePath)
   lines <- createSampleFile(filePath, paste0(dataDir, "sample_", newsFile), floor(0.25*numLines))
-  writeLines(lines, outSample, encoding = "UTF-8") 
+  writeLines(lines, outSample) 
   close(outSample)
 }
 
@@ -79,19 +80,15 @@ predict <- function(text, numSelections) {
   for (i in min(n-1, 4):1) {
     if (i == 4) {
       searchText <- trimws(paste(textTokens[n-i+1], textTokens[n-i+2], textTokens[n-i+3], textTokens[n-i+4], collpase = ""))
-      searchText <- paste0("^", searchText, " ", collapse="")
-      selected <- gramTable5[text %like% searchText]
+      selected <- gramTable5["gram", on=searchText, order("frequency")]
     } else if (i == 3) {
       searchText <- trimws(paste(textTokens[n-i+1], textTokens[n-i+2], textTokens[n-i+3], collpase = ""))
-      searchText <- paste0("^", searchText, " ", collapse="")
-      selected <- gramTable4[text %like% searchText]
+      selected <- gramTable4["gram", on=searchText, order("frequency")]
     } else if (i == 2) {
       searchText <- trimws(paste(textTokens[n-i+1], textTokens[n-i+2], collapse = ""))
-      searchText <- paste0("^", searchText, " ", collapse="")
-      selected <- gramTable3[text %like% searchText]
+      selected <- gramTable3["gram", on=searchText, order("frequency")]
     } else {
-      searchText <- paste0("^", trimws(textTokens[n-i+1]), " ", collapse="")
-      selected <- gramTable2[text %like% searchText ]
+      selected <- gramTable2["gram", on=searchText, order("frequency")]
     } 
     if (nrow(selected) > 0) {
       #selected.max <- selected[which.max(selected$frequency), 1]
@@ -173,11 +170,24 @@ createNGrams <- function(ngram) {
   grams <- tokens(trainingData, what='fasterword', remove_numbers=TRUE, remove_punct=TRUE, remove_twitter=TRUE, remove_url = TRUE, remove_symbols = TRUE, ngrams=ngram, concatenator = " ")
   grams <- tokens_tolower(grams)
   dfm <- dfm(grams)
-  freq <- docfreq(dfm)
+  freq <- docfreq(dfm, scheme="count")
   df <- as.data.frame(freq)
-  dt <- data.table(text=row.names(df), frequency=freq)
-  setkey(dt, "text")
-  dt <- dt[order(text)]
+  df$text <- rownames(df)
+  getKey <- function(x) {
+    ul = paste(word(x, 1:ngram-1), collapse=" ")
+  }
+  getToken <- function(x) {
+    ul = word(x, -1)
+    paste(ul,collapse="")
+  }
+  if (ngram > 2) {
+    df <- df[which(df[,1]>1), ]
+  }
+  dt <- data.table(gram=lapply(df[,2], getKey), 
+                   prediction=lapply(df[,2], getToken),
+                   frequency=df[,1])
+  setkey(dt, "gram")
+  #dt <- dt[order(gram)]
   return (dt)
 }
 ```
@@ -220,6 +230,7 @@ p = c("The guy in front of me just bought a pound of bacon, a bouquet, and a cas
       "Be grateful for the good times and keep the faith during the",
       "If this isn't the cutest thing you've ever seen, then you must be")
 a = c("beer", "world", "happiest", "defense", "beach", "way", "time", "fingers", "bad", "insane")
+#sapply(p, predict)
 #createLookupFile(df2)
 ```
 ## Ranking the ngrams
