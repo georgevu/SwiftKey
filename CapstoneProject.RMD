@@ -26,7 +26,7 @@ readSampleFile <- function() {
   lines <- readLines(con, encoding = "UTF-8")
   close(con)
   set.seed(seed)
-  idx <- sample(seq(1, 2), size = length(lines), replace = TRUE, prob = c(.7, .3))
+  idx <- sample(seq(1, 2), size = length(lines), replace = TRUE, prob = c(.8, .2))
   trainingData <- lines[idx==1]
   testingData <- lines[idx==2]
   out <- file(trainingDataFile, "w") 
@@ -54,16 +54,16 @@ createDataFiles <- function() {
   outSample <- file(sampleFile, "w") 
   filePath <- paste0(dataPath, blogFile)
   numLines <- countLines(filePath)
-  lines <- createSampleFile(filePath, paste0(dataDir, "sample_", blogFile), floor(0.05*numLines))
+  lines <- createSampleFile(filePath, paste0(dataDir, "sample_", blogFile), numLines)
   writeLines(lines, outSample) 
-  filePath <- paste0(dataPath, twitterFile)
-  numLines <- countLines(filePath)
-  lines <- createSampleFile(filePath, paste0(dataDir, "sample_", twitterFile), floor(0.05*numLines))
-  writeLines(lines, outSample) 
-  filePath <- paste0(dataPath, newsFile)
-  numLines <- countLines(filePath)
-  lines <- createSampleFile(filePath, paste0(dataDir, "sample_", newsFile), floor(0.05*numLines))
-  writeLines(lines, outSample) 
+#  filePath <- paste0(dataPath, twitterFile)
+#  numLines <- countLines(filePath)
+#  lines <- createSampleFile(filePath, paste0(dataDir, "sample_", twitterFile), floor(0.25*numLines))
+#  writeLines(lines, outSample) 
+#  filePath <- paste0(dataPath, newsFile)
+#  numLines <- countLines(filePath)
+#  lines <- createSampleFile(filePath, paste0(dataDir, "sample_", newsFile), floor(0.25*numLines))
+#  writeLines(lines, outSample) 
   close(outSample)
 }
 
@@ -140,16 +140,36 @@ To do some of the NLP processing on the data I wil use the 'quanteda' library to
 * Remove ngrams with that only occur once (dfm function)
 
 ```{r buildTokens, echo=FALSE}
-gramTable <- data.frame()
-#  grams <- tokens(trainingData, what='fasterword', remove_numbers=TRUE, remove_punct=TRUE, remove_twitter=TRUE, # remove_url = TRUE, remove_symbols = TRUE, ngrams=ngram, concatenator = " ")
-allTokens <- tokens(char_tolower(trainingData), what="fasterword", ngrams=2:4, remove_punct = TRUE, 
-                remove_twitter = TRUE, remove_numbers = TRUE, 
-                remove_symbols = TRUE, remove_url = TRUE, verbose=FALSE, 
-                concatenator = " ")
-dfmGrams <- dfm(allTokens)
-dfmFreq <- docfreq(dfmGrams, scheme="count")
-gramTable <- as.data.frame(dfmFreq)
-#gramTable <- gramTable[order(gramTable$row.name), ]
+createNGramTable <- function(ngram) {
+  allTokens <- tokens(char_tolower(trainingData), what="fasterword", ngrams=ngram,  
+                  remove_twitter = TRUE, remove_numbers = TRUE, remove_punct=TRUE,
+                  remove_symbols = TRUE, remove_url = TRUE, verbose=FALSE, 
+                  concatenator = " ")
+  dfmGrams <- dfm(allTokens)
+  dfmFreq <- docfreq(dfmGrams, scheme="count")
+  rm(dfmGrams, allTokens)
+  gramTable <- data.table(gram=names(dfmFreq), predict = "", count=dfmFreq)
+  rm(dfmFreq)
+  gramTable <- gramTable[count>1]
+  getPredict <- function(x) {
+    ul = word(x, -1)
+    return (ul)
+  }
+  getGram <- function(x) {
+    if (ngram == 2) {
+      ul = word(x, 1)
+    } else {
+      ul = paste(word(x, 1:(ngram-1)), collapse=" ")
+    }
+    return (ul)
+  }
+  for (i in 1:nrow(gramTable)) {
+    gramTable[i, predict := getPredict(gramTable$gram[i])]
+    gramTable[i, gram := getGram(gramTable$gram[i])]
+  }
+  setkey(gramTable, text)
+  return (gramTable)
+}
 
 predict <- function(text, numSelections) {
   textTokens <- tokens(text, what='word', remove_numbers=TRUE, remove_punct=TRUE, remove_twitter=TRUE, remove_url = TRUE, remove_symbols = TRUE, n=1, concatenator = " ")
@@ -157,27 +177,27 @@ predict <- function(text, numSelections) {
   textTokens <- tokens_tolower(textTokens)[[1]]
   predictedText <- ""
   n <- length(textTokens)
-  for (i in min(n-1, 4):1) {
+  for (i in min(n-1, 2):1) {
     if (i == 4) {
       searchText <- trimws(paste(textTokens[n-i+1], textTokens[n-i+2], textTokens[n-i+3], textTokens[n-i+4], collpase = ""))
-      searchText <- paste0("^", searchText, collapse="")
+      selected <- gramTable5[text == searchText]
     } else if (i == 3) {
       searchText <- trimws(paste(textTokens[n-i+1], textTokens[n-i+2], textTokens[n-i+3], collpase = ""))
-      searchText <- paste0("^", searchText, collapse="")
+      selected <- gramTable4[text == searchText]
     } else if (i == 2) {
       searchText <- trimws(paste(textTokens[n-i+1], textTokens[n-i+2], collapse = ""))
-      searchText <- paste0("^", searchText, collapse="")
+      selected <- gramTable3[text == searchText]
     } else {
       searchText <- trimws(paste0("^", textTokens[n-i+1], " ", collapse = ""))
+      selected <- gramTable2[text == searchText]
     } 
-    selected <- gramTable[grep(searchText, rownames(gramTable)),]
     if (nrow(selected) > 0) {
-      #selected.max <- selected[which.max(selected$frequency), 1]
-      #predictedText <- unlist(strsplit(selected.max, " "))[i+1]
+      selected <- selected[order(-count)]
+      predictedText <- unlist(selected[predict])
       break
     }
   }
-  return(selected) 
+  return (list(selected, predictedText))
 }
 ```
 ## Data Inspection
@@ -200,14 +220,42 @@ Now that words have been tokenized and put into ngrams with a maximum of 5-grams
 #barplot(topFeatures5, las = 2, names.arg = names(topFeatures5),
 #        col ="lightblue", main ="Most frequent 5-grams",
 #        ylab = "Word frequencies")
+#plot <- ggplot(gramfreq, aes(x=reorder(ngram,freq), y=freq , width=0.6)) +
+#        geom_bar(stat="Identity", fill="black") +
+#        geom_text(aes(label=freq), vjust = +0.3, hjust=-0.2) + ggtitle(title) +
+#        ylab("Frequency") + xlab(term) +
+#        theme(plot.title = element_text(lineheight=.8, face="bold"), axis.text=element_text(size=11) ) +
+#        ylim(0, 1.05 * gramfreq[1,]$freq) + coord_flip()
+#total 
 ```
 ## Creating Token Files
 With the document feature matrices for each ngram I can extract the tokens with the frequency that token appears in the document.  I can use the frequency data and add a "rank" column and create a sorted data frame (sorted by the token, alphabetically).  The sorted data frame can be saved as a set of files, for example A2.txt would contain all the bigrams starting with a, and use the files for fast lookups. 
 ```{r createLookupFile, echo=FALSE}
-#gramTable2 <- createNGrams(2)
-#gramTable3 <- createNGrams(3)
-#gramTable4 <- createNGrams(4)
-#gramTable5 <- createNGrams(5)
+gramTable2File <- paste0(dataDir, 'gramTable2.csv')
+gramTable3File <- paste0(dataDir, 'gramTable3.csv')
+gramTable4File <- paste0(dataDir, 'gramTable4.csv')
+if (file.exists(gramTable2File)) {
+  gramTable2 <- fread(gramTable2File)
+  setkey(gramTable2, text)
+} else {
+  gramTable2 <- createNGramTable(2)
+  fwrite(gramTable2, file=gramTable2File)
+}
+if (file.exists(gramTable3File)) {
+  gramTable3 <- fread(gramTable3File)
+  setkey(gramTable3, text)
+} else {
+  gramTable3 <- createNGramTable(3)
+  fwrite(gramTable3, file=gramTable3File)
+}
+if (file.exists(gramTable4File)) {
+  gramTable4 <- fread(gramTable4File)
+  setkey(gramTable4, text)
+} else {
+  gramTable4 <- createNGramTable(4)
+  fwrite(gramTable4, file=gramTable4File)
+}
+#gramTable5 <- createNGramTable(5)
 p = c("The guy in front of me just bought a pound of bacon, a bouquet, and a case of", 
       "You're the reason why I smile everyday. Can you follow me please? It would mean the", 
       "Hey sunshine, can you follow me and make me the",
@@ -219,9 +267,26 @@ p = c("The guy in front of me just bought a pound of bacon, a bouquet, and a cas
       "Be grateful for the good times and keep the faith during the",
       "If this isn't the cutest thing you've ever seen, then you must be")
 a = c("beer", "world", "happiest", "defense", "beach", "way", "time", "fingers", "bad", "insane")
-#sapply(p, predict)
+#lapply(p, predict)
 #createLookupFile(df2)
 ```
+
+## Exploratory Data Analysis
+ conversion to lower case, ensuring apostrophes were retained to maintain
+contractions, removal of numbers, and removal of excess whitespace. Intermittently in the process, the corpus was
+written back to disk and the database was re-initialized using the filehash package to reduce the size of data
+processing in RAM
+
+# n-grams	Top 20 n-gram 
+coverage [%]	n-grams with 
+freq 1 [%]	# n-grams for 
+50% coverage	# n-grams for 
+90% coverage
+1-grams (unigrams)	314,288	27.67	57.12	142	7,998
+2-grams (bigrams)	4,459,378	3.13	73.63	39,759	2,544,441
+3-grams (trigrams)	11,431,454	0.34	86.86	2,280,991	9,601,362
+4-grams	15,337,190	0.10	94.65	6,599,133	13,589,579
+
 ## Ranking the ngrams
 The tokens will be given ranks according to their frequency and the tokens and ranks of the ngrams will be saved to a file with a title consisting of a letter and number.  The letter will denote the first letter of the token and the number will be the ngram length.  The file will be useful for tracking the tokens as well as updating the rank.  I would like to devise a ranking system for the tokens by adding a column to the token file called 'pick' that increments the value whenever the token is picked for use.  Thus, the total rank of the token can be calculated by totalRank = (frequency + rank) / frequency.  This way the total rank of the selected tokens will be updated and have a higher rank then those that are not selected.  Depending on the application, I can use the total rank to give the user a selection of inputs to select for the next word or set of words.
 
