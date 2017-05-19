@@ -54,16 +54,16 @@ createDataFiles <- function() {
   outSample <- file(sampleFile, "w") 
   filePath <- paste0(dataPath, blogFile)
   numLines <- countLines(filePath)
-  lines <- createSampleFile(filePath, paste0(dataDir, "sample_", blogFile), numLines)
+  lines <- createSampleFile(filePath, paste0(dataDir, "sample_", blogFile), floor(0.25*numLines))
   writeLines(lines, outSample) 
-#  filePath <- paste0(dataPath, twitterFile)
-#  numLines <- countLines(filePath)
-#  lines <- createSampleFile(filePath, paste0(dataDir, "sample_", twitterFile), floor(0.25*numLines))
-#  writeLines(lines, outSample) 
-#  filePath <- paste0(dataPath, newsFile)
-#  numLines <- countLines(filePath)
-#  lines <- createSampleFile(filePath, paste0(dataDir, "sample_", newsFile), floor(0.25*numLines))
-#  writeLines(lines, outSample) 
+  filePath <- paste0(dataPath, twitterFile)
+  numLines <- countLines(filePath)
+  lines <- createSampleFile(filePath, paste0(dataDir, "sample_", twitterFile), floor(0.25*numLines))
+  writeLines(lines, outSample) 
+  filePath <- paste0(dataPath, newsFile)
+  numLines <- countLines(filePath)
+  lines <- createSampleFile(filePath, paste0(dataDir, "sample_", newsFile), floor(0.25*numLines))
+  writeLines(lines, outSample) 
   close(outSample)
 }
 
@@ -103,7 +103,7 @@ if (!file.exists("Coursera-SwiftKey.zip")) {
 }
 if (!(dir.exists(dataDir))) {
   dir.create(dataDir)
-  unzip(datasetFile, exdir=dataDir)
+  unzip(datasetFile, exdir="./data")
 }
 blogFile <- 'en_US.blogs.txt'
 twitterFile <- 'en_US.twitter.txt'
@@ -146,9 +146,11 @@ createNGramTable <- function(ngram) {
                   remove_symbols = TRUE, remove_url = TRUE, verbose=FALSE, 
                   concatenator = " ")
   dfmGrams <- dfm(allTokens)
+  rm(allTokens)
   dfmFreq <- docfreq(dfmGrams, scheme="count")
   gramTable <- data.table(gram=names(dfmFreq), predict = "", count=dfmFreq)
   gramTable <- gramTable[count>1]
+  rm(dfmFreq)
   getPredict <- function(x) {
     ul = word(x, -1)
     return (ul)
@@ -165,33 +167,35 @@ createNGramTable <- function(ngram) {
     gramTable[i, predict := getPredict(gramTable$gram[i])]
     gramTable[i, gram := getGram(gramTable$gram[i])]
   }
-  setkey(gramTable, text)
+  setkey(gramTable, gram)
   return (gramTable)
 }
 
 predict <- function(text, numSelections) {
   textTokens <- tokens(text, what='word', remove_numbers=TRUE, remove_punct=TRUE, remove_twitter=TRUE, remove_url = TRUE, remove_symbols = TRUE, n=1, concatenator = " ")
-  #textTokens <- tokens_remove(textTokens, stopwords("english"))
   textTokens <- tokens_tolower(textTokens)[[1]]
   predictedText <- ""
   n <- length(textTokens)
-  for (i in min(n-1, 2):1) {
+  for (i in min(n-1, 4):1) {
     if (i == 4) {
       searchText <- trimws(paste(textTokens[n-i+1], textTokens[n-i+2], textTokens[n-i+3], textTokens[n-i+4], collpase = ""))
-      selected <- gramTable5[text == searchText]
+      match <- gramTable5[gram == searchText]
     } else if (i == 3) {
       searchText <- trimws(paste(textTokens[n-i+1], textTokens[n-i+2], textTokens[n-i+3], collpase = ""))
-      selected <- gramTable4[text == searchText]
+      match <- gramTable4[gram == searchText]
     } else if (i == 2) {
       searchText <- trimws(paste(textTokens[n-i+1], textTokens[n-i+2], collapse = ""))
-      selected <- gramTable3[text == searchText]
+      match <- gramTable3[gram == searchText]
     } else {
-      searchText <- trimws(paste0("^", textTokens[n-i+1], " ", collapse = ""))
-      selected <- gramTable2[text == searchText]
+      searchText <- trimws(paste0(textTokens[n-i+1], " ", collapse = ""))
+      match <- gramTable2[gram == searchText]
     } 
-    if (nrow(selected) > 0) {
-      selected <- selected[order(-count)]
-      predictedText <- unlist(selected[predict])
+    if (match[,.N] > 0) {
+      selected <- match[order(-count)]
+      if (selected[,.N] > 3) {
+        selected <- selected[1:3,]
+      }
+      predictedText <- unlist(selected[,predict])
       break
     }
   }
@@ -232,6 +236,7 @@ With the document feature matrices for each ngram I can extract the tokens with 
 gramTable2File <- paste0(dataDir, 'gramTable2.csv')
 gramTable3File <- paste0(dataDir, 'gramTable3.csv')
 gramTable4File <- paste0(dataDir, 'gramTable4.csv')
+gramTable5File <- paste0(dataDir, 'gramTable5.csv')
 if (file.exists(gramTable2File)) {
   gramTable2 <- fread(gramTable2File)
   setkey(gramTable2, text)
@@ -253,7 +258,13 @@ if (file.exists(gramTable4File)) {
   gramTable4 <- createNGramTable(4)
   fwrite(gramTable4, file=gramTable4File)
 }
-#gramTable5 <- createNGramTable(5)
+if (file.exists(gramTable5File)) {
+  gramTable5 <- fread(gramTable5File)
+  setkey(gramTable5, text)
+} else {
+  gramTable5 <- createNGramTable(5)
+  fwrite(gramTable5, file=gramTable5File)
+}
 p = c("The guy in front of me just bought a pound of bacon, a bouquet, and a case of", 
       "You're the reason why I smile everyday. Can you follow me please? It would mean the", 
       "Hey sunshine, can you follow me and make me the",
