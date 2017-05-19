@@ -147,9 +147,7 @@ createNGramTable <- function(ngram) {
                   concatenator = " ")
   dfmGrams <- dfm(allTokens)
   dfmFreq <- docfreq(dfmGrams, scheme="count")
-  rm(dfmGrams, allTokens)
   gramTable <- data.table(gram=names(dfmFreq), predict = "", count=dfmFreq)
-  rm(dfmFreq)
   gramTable <- gramTable[count>1]
   getPredict <- function(x) {
     ul = word(x, -1)
