@@ -192,14 +192,14 @@ predict <- function(text, numSelections) {
     } 
     if (match[,.N] > 0) {
       selected <- match[order(-count)]
-      if (selected[,.N] > 3) {
-        selected <- selected[1:3,]
+      if (selected[,.N] > 4) {
+        selected <- selected[1:4,]
       }
-      predictedText <- unlist(selected[,predict])
+      predictedText <- selected[,predict]
       break
     }
   }
-  return (list(selected, predictedText))
+  return(predictedText)
 }
 ```
 ## Data Inspection
@@ -239,28 +239,28 @@ gramTable4File <- paste0(dataDir, 'gramTable4.csv')
 gramTable5File <- paste0(dataDir, 'gramTable5.csv')
 if (file.exists(gramTable2File)) {
   gramTable2 <- fread(gramTable2File)
-  setkey(gramTable2, text)
+  setkey(gramTable2, gram)
 } else {
   gramTable2 <- createNGramTable(2)
   fwrite(gramTable2, file=gramTable2File)
 }
 if (file.exists(gramTable3File)) {
   gramTable3 <- fread(gramTable3File)
-  setkey(gramTable3, text)
+  setkey(gramTable3, gram)
 } else {
   gramTable3 <- createNGramTable(3)
   fwrite(gramTable3, file=gramTable3File)
 }
 if (file.exists(gramTable4File)) {
   gramTable4 <- fread(gramTable4File)
-  setkey(gramTable4, text)
+  setkey(gramTable4, gram)
 } else {
   gramTable4 <- createNGramTable(4)
   fwrite(gramTable4, file=gramTable4File)
 }
 if (file.exists(gramTable5File)) {
   gramTable5 <- fread(gramTable5File)
-  setkey(gramTable5, text)
+  setkey(gramTable5, gram)
 } else {
   gramTable5 <- createNGramTable(5)
   fwrite(gramTable5, file=gramTable5File)
