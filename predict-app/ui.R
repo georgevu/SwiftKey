@@ -8,32 +8,24 @@
 #
 
 library(shiny)
+library(shinythemes)
 # Define UI for application that draws a histogram
-shinyUI(fluidPage(
+shinyUI(fluidPage(theme=shinytheme("superhero"),
   
   # Application title
   titlePanel("Text Prediction"),
-  
-  # Sidebar with a text input 
-  sidebarLayout(
-    sidebarPanel(
-      h2("Enter any text with two or more words"),
-       textInput("phrase", "Enter Text"),
-       submitButton("Submit"),
-       hr(),
-       helpText("Text Predction Application", br(), 
-                "This application will attempt to predict what the next text you will type given any text input that has two or more words.", br(),
-                "1. Type in your phrase or sentence in the input ",br(),
-                "2. Click the 'Submit' button",br(),
-                "3. If the prediction server was successful, you should see 1 to 4 different text predictions"
-               )
-    ),
-    
-    # Show a plot of the generated distribution
-    mainPanel(
-       textOutput("predict1"),
-       textOutput("predict2"),
-       textOutput("predict3")
-    )
-  )
+  fluidRow(
+    column(12, wellPanel(
+      textInput("phrase", "Start Typing"),
+      div(style="display:inline-block;background-color:black;border:2px solid darkblue;padding: 5px", conditionalPanel(condition="output.predict1 != 'NA'", textOutput("predict1"))),
+      div(style="display:inline-block;background-color:black;border:2px solid darkblue;padding: 5px", conditionalPanel(condition="output.predict2 != 'NA'", textOutput("predict2"))), 
+      div(style="display:inline-block;background-color:black;border:2px solid darkblue;padding: 5px", conditionalPanel(condition="output.predict3 != 'NA'", textOutput("predict3"))), 
+      div(style="display:inline-block;background-color:black;border:2px solid darkblue;padding: 5px", conditionalPanel(condition="output.predict4 != 'NA'", textOutput("predict4")))
+    ))
+  ),
+  helpText(h3("Text Predction Application Help"), br(), 
+            "This application will attempt to predict what the next word you will type.", br(),
+            "As you type wait after typing the last word to get a prediction for the next word.", br(),
+            "Be patient after typing if you want the next word prediction since it may take a few seconds."
+           )
 ))

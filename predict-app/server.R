@@ -13,18 +13,16 @@ library(data.table)
 source('predict.R', local=FALSE)
 
 shinyServer(function(input, output) {
-  
   prediction <- reactive({predict(input$phrase)})
-  if (length(prediction) > 0) {
-    output$predict1 <- renderText({prediction()[1]})
-  }
-  if (length(prediction) > 1) {
-    output$predict1 <- renderText({prediction()[2]})
-  }
-  if (length(prediction) > 2) {
-    output$predict1 <- renderText({prediction()[3]})
-  }
-  if (length(prediction) > 3) {
-    output$predict1 <- renderText({prediction()[4]})
-  }
+  output$predict1 <- renderText({prediction()[1]})
+  output$predict2 <- renderText({prediction()[2]})
+  output$predict3 <- renderText({prediction()[3]})
+  output$predict4 <- renderText({prediction()[4]})
+  output$prediction <- renderPrint({
+    prediction()
+  })
+  outputOptions(output, "predict1", suspendWhenHidden=FALSE)
+  outputOptions(output, "predict2", suspendWhenHidden=FALSE)
+  outputOptions(output, "predict3", suspendWhenHidden=FALSE)
+  outputOptions(output, "predict4", suspendWhenHidden=FALSE)
 })

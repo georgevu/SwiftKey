@@ -1,8 +1,7 @@
-dataDir <- './data/'
-gramTable2File <- paste0(dataDir, 'gramTable2.csv')
-gramTable3File <- paste0(dataDir, 'gramTable3.csv')
-gramTable4File <- paste0(dataDir, 'gramTable4.csv')
-gramTable5File <- paste0(dataDir, 'gramTable5.csv')
+gramTable2File <- './gramTable2.csv'
+gramTable3File <- './gramTable3.csv'
+gramTable4File <- './gramTable4.csv'
+gramTable5File <- './gramTable5.csv'
 
 predict <- function(phrase) {
   textTokens <- tokens(phrase, what='word', remove_numbers=TRUE, remove_punct=TRUE, remove_twitter=TRUE, remove_url = TRUE, remove_symbols = TRUE, n=1, concatenator = " ")
@@ -34,7 +33,7 @@ predict <- function(phrase) {
       break
     }
   }
-  predictedText <- c("No match found")
+  predictedText <- NA
   if (match[,.N] > 0) {
     match[order(-count)]
     if (match[,.N] > 4) {
