@@ -13,7 +13,11 @@ library(data.table)
 source('predict.R', local=FALSE)
 
 shinyServer(function(input, output) {
-  prediction <- reactive({predict(input$phrase)})
+  prediction <- reactive({
+    if (endsWith(input$phrase, " ")) {
+      predict(input$phrase)
+    }
+  })
   output$predict1 <- renderText({prediction()[1]})
   output$predict2 <- renderText({prediction()[2]})
   output$predict3 <- renderText({prediction()[3]})
