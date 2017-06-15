@@ -1,28 +1,55 @@
-predict-slider
+Capstone "Stupid" Word Prediction Application
 ========================================================
-author: 
-date: 
+author: George Vu
+date: June 17, 2017
 autosize: true
 
-First Slide
+Introduction
 ========================================================
 
-For more details on authoring R presentations please visit <https://support.rstudio.com/hc/en-us/articles/200486468>.
+Word prediction - is it possible?
 
-- Bullet 1
-- Bullet 2
-- Bullet 3
+When typing on your smart phone or computer you don't want to have to type every single last word for that senetence.
 
-Slide With Code
+Let the Word Prediction Application help you.  With it's fast and friendly interface you will be more productive in no time.  Here are some of the benefits of the word prediction application:
+
+- Faster sentence typing 
+- No more mispelled words
+- It's just plain fun!
+
+How does word prediction work?
 ========================================================
 
-```{r}
-summary(cars)
-```
+Word prediction uses the concept of ngrams and natural language processing to statistically predict what the next word in a sentence will be given a set of words that have been inputted (better known generally as Markov Assumption). My word prediction application has the following properties:
 
-Slide With Plot
+- Predict a word given any length of words as input 
+- Prediction of a word using up to a 4-gram of words
+- Prediction of a word will be shown after inputting a space character
+- Up to four different words to choose from for your next word
+- Simple and fast design that allows you to be more productive
+- Easy to expand the vocabulary of the word prediction engine
+
+
+How does my word prediction work?
 ========================================================
 
-```{r, echo=FALSE}
-plot(cars)
-```
+In my implementation of the word prediction concept I make use of the following principles:
+
+- "Stupid" Backoff using a modified Katz Backoff model approach employing only relative frequencies
+- Ordered tables of 2, 3, 4, and 5 ngrams
+- Tables contain the ngram, ordered alphabetically, with the relative frequency 
+
+This implementation allows for faster searching of ngrams since most searches can be done in log(n) time.  
+The simple approach to word prediction provides faster input response and smaller memory footprint.
+
+Improvements
+========================================================
+
+Since my word prediction application is modular I can update my ngram tables independently and easily expand to any number of n's of grams.  Other improvements include expanding the size of the number of ngrams available then using a divide and conquer strategy to beak up ngram tables into alpha-ngram pair tables for faster searches and more accurate predictions.
+
+Now is your chance to try the application - just go to this link in your browser and give it a whirl!
+
+
+
+
+
