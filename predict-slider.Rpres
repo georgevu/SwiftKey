@@ -9,7 +9,7 @@ Introduction
 
 Word prediction - is it possible?
 
-When typing on your smart phone or computer you don't want to have to type every single last word for that senetence.
+When typing on your smart phone or computer you don't want to have to type every single last word for that sentence.
 
 Let the Word Prediction Application help you.  With it's fast and friendly interface you will be more productive in no time.  Here are some of the benefits of the word prediction application:
 
@@ -30,19 +30,19 @@ Word prediction uses the concept of ngrams and natural language processing to st
 - Easy to expand the vocabulary of the word prediction engine
 
 
-How does my word prediction work?
+Some key differences in my Word Prediction
 ========================================================
 
-In my implementation of the word prediction concept I make use of the following principles:
+In my implementation of the word prediction concept I make use of the following concepts:
 
-- "Stupid" Backoff using a modified Katz Backoff model approach employing only relative frequencies
+- Use of "Stupid" Backoff which employs a modified Katz Backoff model approach using relative frequencies only
 - Ordered tables of 2, 3, 4, and 5 ngrams
-- Tables contain the ngram, ordered alphabetically, with the relative frequency 
+- Tables contain the ngram as a key, ordered alphabetically, with the relative frequency to increase lookup speeds
 
 This implementation allows for faster searching of ngrams since most searches can be done in log(n) time.  
 The simple approach to word prediction provides faster input response and smaller memory footprint.
 
-Improvements
+Later Improvements
 ========================================================
 
 Since my word prediction application is modular I can update my ngram tables independently and easily expand to any number of n's of grams.  Other improvements include expanding the size of the number of ngrams available then using a divide and conquer strategy to beak up ngram tables into alpha-ngram pair tables for faster searches and more accurate predictions.
